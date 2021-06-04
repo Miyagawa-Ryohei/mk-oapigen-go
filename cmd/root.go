@@ -5,8 +5,5 @@ import (
 )
 
 var RootCmd = &cobra.Command{
-	Use:"oapigen",
+	Use: "oapigen",
 }
-
-
-

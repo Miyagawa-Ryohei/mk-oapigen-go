@@ -1,6 +1,6 @@
 package main
 
-import "swag2go/cmd"
+import "mk-oapigen-go/cmd"
 
 func main() {
 	cmd.RootCmd.Execute()

@@ -1,4 +1,4 @@
-module github/Miyagawa-Ryohei/mk-oapigen
+module mk-oapigen-go
 
 go 1.16
 

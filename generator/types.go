@@ -10,7 +10,7 @@ type RouteDefinitions = []RouteDefinition
 
 type RouteDefinition struct {
 	BaseName string
-	Path  string
+	Path     string
 	EndpointDefinitions
 }
 
@@ -21,11 +21,10 @@ type ServerDefinition struct {
 type EndpointDefinitions = []EndpointDefinition
 
 type EndpointDefinition struct {
-	Path  string
-	Method string
+	Path         string
+	Method       string
 	FunctionName string
 }
-
 
 type TypeDefinitions = []TypeDefinition
 
