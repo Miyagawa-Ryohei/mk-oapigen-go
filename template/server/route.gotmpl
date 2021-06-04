@@ -1,0 +1,27 @@
+package registory
+
+import (
+"github.com/labstack/echo/v4"
+)
+
+type {{ .BaseName }}Handler interface {
+    {{ range .Endpoints }}
+    {{ .FunctionName }}(ctx echo.Context) error
+    {{ end }}
+}
+
+type {{ .BaseName }}Register struct {
+    h {{ .BaseName }}Handler
+}
+
+func (r *{{ .BaseName }}Register) Attach(g *echo.Group){
+    {{ range .Endpoints}}
+    g.{{ .Method }}("{{ .Path }}",r.h.{{ .FunctionName }})
+    {{ end }}
+}
+
+func New{{ .BaseName }}Register (h {{ .BaseName }}Handler) RouteRegister {
+    return &{{ .BaseName }}Register{
+        h : h,
+    }
+}

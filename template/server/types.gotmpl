@@ -1,0 +1,5 @@
+package {{ .TypesPackageName }}
+
+{{ for .Requests }}
+{{ .RequestProperty }}
+{{ end }}

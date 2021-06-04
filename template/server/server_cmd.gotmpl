@@ -1,0 +1,44 @@
+package cmd
+
+import (
+"fmt"
+"github.com/spf13/cobra"
+"mkidp/infra/registory"
+"mkidp/adapter/gateway/api/v1"
+)
+
+var serverCmd = &cobra.Command{
+Use:"serve",
+
+RunE: func(cmd *cobra.Command, arg []string) error {
+fmt.Println("server start")
+port, err := cmd.Flags().GetString("port")
+if err != nil {
+return err
+}
+rs := GetRegisters()
+app := registory.NewApplication(rs)
+if err := app.Start(port); err != nil {
+panic(err)
+}
+
+return nil
+},
+}
+
+func GetRegisters()([]registory.RouteRegister) {
+rs := []registory.RouteRegister{}
+{{range .Routes }}rs = append(rs, registory.New{{.BaseName}}Register(v1.New{{.BaseName}}Group()))
+{{end}}
+return rs
+}
+
+
+
+
+func init() {
+serverCmd.Flags().StringP("port","p","8080","ListenPort")
+RootCmd.AddCommand(serverCmd)
+}
+
+
