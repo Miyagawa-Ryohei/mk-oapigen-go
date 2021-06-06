@@ -3,8 +3,8 @@ package cmd
 import (
 "fmt"
 "github.com/spf13/cobra"
-"mkidp/infra/registory"
-"mkidp/adapter/gateway/api/v1"
+"{{ .Module }}/infra/registory"
+"{{ .EndpointPackage }}"
 )
 
 var serverCmd = &cobra.Command{

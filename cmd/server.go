@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"github.com/spf13/cobra"
 	"mk-oapigen-go/generator"
+	"os"
+	"path"
 )
 
 var serverCmd = &cobra.Command{
@@ -16,35 +18,38 @@ var serverCmd = &cobra.Command{
 			return err
 		}
 
-		outputPackage, err := cmd.Flags().GetString("endpoint")
+		module, err := cmd.Flags().GetString("module")
 		if err != nil {
 			return err
 		}
 
-		projectRoot, err := cmd.Flags().GetString("server")
+		src, err := cmd.Flags().GetString("src")
 		if err != nil {
 			return err
 		}
 
-		routes, err := cmd.Flags().GetString("routes")
+		root, err := cmd.Flags().GetString("root")
 		if err != nil {
 			return err
 		}
 
-		if err = generator.GenenateServerSideCode(specFile); err != nil {
+		srcDir := path.Join(root,src)
+
+		if err := os.MkdirAll(path.Join(srcDir),509) ; err != nil {
 			return err
 		}
-		fmt.Println(outputPackage)
-		fmt.Println(projectRoot)
-		fmt.Println(routes)
+		fmt.Println(srcDir)
+		if err = generator.GenerateServerSideCode(specFile,module,srcDir); err != nil {
+			return err
+		}
 		return nil
 	},
 }
 
 func init() {
 	serverCmd.Flags().StringP("openapi", "f", "openapi.yml", "Input OpenAPI Specification file path [ex. docs/openapi.yml] (default openapi.yml")
-	serverCmd.Flags().StringP("endpoint", "e", "src/gateway/endpoints", "Endpoint source files directory [ex. for/example/endpoints] (default src/gateway/endpoints)")
-	serverCmd.Flags().StringP("server", "s", "src/infra/server.go", "Server Definition File [ ex. for/example/server.go ] (default src/infra/server.go)")
-	serverCmd.Flags().StringP("routes", "r", "src/infra/routes", "Route Register files directory [ ex. for/example/register/route ] default (src/infra/routes)")
+	serverCmd.Flags().StringP("module", "m", "", "go mod module name [ex. sample api] (required)")
+	serverCmd.Flags().StringP("src", "s", "./", "source directory [ex. src/] (default src ./)")
+	serverCmd.Flags().StringP("root", "r", "./", "project root directory [ex. ./project] (default src ./)")
 	RootCmd.AddCommand(serverCmd)
 }
