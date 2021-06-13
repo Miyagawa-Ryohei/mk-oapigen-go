@@ -9,6 +9,7 @@ import (
 	"mk-oapigen-go/types"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 	"text/template"
 )
@@ -45,7 +46,7 @@ func loadFromSpec(openapi string, module string) (*types.RootDefinitions, error)
 		EndpointPackage: path.Join(module,"adapter","gateway","api",sp.Info.Version),
 		Routes: nil,
 		Server: nil,
-		Types:  nil,
+		Types:  createTypeStruct(sp),
 	}
 
 	server := types.ServerDefinition{
@@ -77,12 +78,14 @@ func loadFromSpec(openapi string, module string) (*types.RootDefinitions, error)
 		})
 	}
 
-	var Types []types.TypeDefinition
 	root.Server = &server
 	root.Routes = &routes
-	root.Types = &Types
 
 	return root, nil
+}
+
+func GenFromTypes(tmpl []byte, definitions map[string][]types.TypeDefinition, filename string) {
+	writeBufToGoFile(tmpl, filename, definitions)
 }
 
 func GenFromServer(tmpl []byte, definitions *types.ServerDefinition, filename string) {
@@ -101,6 +104,145 @@ func GenFromRouteDefinition(tmpl []byte, definitions *[]types.RouteDefinition, s
 	for _, definition := range *definitions {
 		writeBufToGoFile(tmpl, path.Join(src, definition.FileName), definition)
 	}
+}
+
+func addType(result map[string][]types.TypeDefinition, typeName string, ref *openapi3.Schema) {
+	for k,content := range(ref.Properties) {
+		propertyName := strcase.ToCamel(k)
+		if content.Ref != "" {
+			schema := strings.Split(content.Ref, "/")
+			name := schema[len(schema)-1]
+			result[name] = []types.TypeDefinition{}
+			addType(result, name, content.Value)
+			result[typeName] = append(result[typeName], types.TypeDefinition{
+				Name:     propertyName,
+				TypeName: name,
+			})
+			continue
+		}
+		if content.Value.Type == "object" {
+			name := strcase.ToCamel(typeName + propertyName)
+			addType(result, name, content.Value)
+			result[typeName] = append(result[typeName], types.TypeDefinition{
+				Name:     propertyName,
+				TypeName: name,
+			})
+			continue
+		}
+		if content.Value.Type == "number" {
+			result[typeName] = append(result[typeName], types.TypeDefinition{
+				Name:     propertyName,
+				TypeName: "float64",
+			})
+			continue
+		}
+		if content.Value.Type == "integer" {
+			result[typeName] = append(result[typeName], types.TypeDefinition{
+				Name:     propertyName,
+				TypeName: "int64",
+			})
+			continue
+		}
+		if content.Value.Type == "boolean" {
+			result[typeName] = append(result[typeName], types.TypeDefinition{
+				Name:     propertyName,
+				TypeName: "bool",
+			})
+			continue
+		}
+		if content.Value.Type == "string" {
+			switch content.Value.Format {
+
+			case "date":
+			case "date-time":
+				result[typeName] = append(result[typeName], types.TypeDefinition{
+					Name:     propertyName,
+					TypeName: "time.Time",
+				})
+				break;
+
+			case "binary":
+				result[typeName] = append(result[typeName], types.TypeDefinition{
+					Name:     propertyName,
+					TypeName: "[]byte",
+				})
+				break;
+
+			default:
+				result[typeName] = append(result[typeName], types.TypeDefinition{
+					Name:     propertyName,
+					TypeName: "string",
+				})
+				break;
+			}
+		}
+	}
+
+}
+
+func createTypeStruct(oapiDef *openapi3.T) map[string][]types.TypeDefinition {
+	result := make(map[string][]types.TypeDefinition)
+
+	for _, v := range(oapiDef.Paths) {
+		for _, methodContents := range v.Operations() {
+			bass := strcase.ToCamel(methodContents.OperationID)
+			fmt.Println(bass)
+			for code, res  := range methodContents.Responses {
+				responseTypeName := ""
+				statusCode, err := strconv.Atoi(code)
+
+				if err != nil {
+					panic(err)
+				}
+
+				if statusCode - 200 < 100 {
+					responseTypeName = bass+"Response"
+				} else {
+					responseTypeName = bass + code + "Error"
+				}
+
+				result[responseTypeName] = []types.TypeDefinition{}
+
+				for mime, content := range res.Value.Content {
+					if mime == "application/json" {
+						if content.Schema.Ref != "" {
+							schema := strings.Split(content.Schema.Ref,"/")
+							name := schema[len(schema)-1]
+							addType(result, name, content.Schema.Value)
+						}
+					} else {
+						result[responseTypeName] = append(result[responseTypeName],types.TypeDefinition{
+							Name: "",
+							TypeName: "string",
+						})
+					}
+				}
+			}
+
+			requestTypeName :=  bass+"Request"
+			result[requestTypeName] = []types.TypeDefinition{}
+			if methodContents.RequestBody == nil {
+				continue
+			}
+			for mime, content := range methodContents.RequestBody.Value.Content{
+				if mime == "application/json" {
+					if content.Schema.Ref != "" {
+						schema := strings.Split(content.Schema.Ref,"/")
+						name := schema[len(schema)-1]
+						addType(result, name, content.Schema.Value)
+					}
+				} else {
+					result[requestTypeName] = append(result[requestTypeName],types.TypeDefinition{
+						Name: "",
+						TypeName: "string",
+					})
+				}
+			}
+		}
+
+	}
+
+	return result
 }
 
 func writeBufToGoFile(tmpl []byte, filebase string, param interface{}) {
@@ -168,6 +310,7 @@ func GenerateServerSideCode(specFile string, module string, src string) error {
 	}
 	fmt.Println(p)
 	fmt.Println(src)
+	GenFromTypes(tempBuf["template/server/types.gotmpl"], root.Types, path.Join(src,"entity","types"))
 	GenFromRouteDefinition(tempBuf["template/server/route.gotmpl"], root.Routes, path.Join(src,"infra","registry","route"))
 	GenFromRouteDefinition(tempBuf["template/server/endpoint.gotmpl"], root.Routes, path.Join(src,p))
 	GenFromStatic(tempBuf["template/server/application.gotmpl"], path.Join(src, "infra", "registry","initialize"))

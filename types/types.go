@@ -1,13 +1,11 @@
 package types
 
-import "fmt"
-
 type RootDefinitions struct {
 	Module         string
 	EndpointPackage string
 	Routes *[]RouteDefinition
 	Server *ServerDefinition
-	Types  *[]TypeDefinition
+	Types   map[string][]TypeDefinition
 }
 
 type RouteDefinition struct {
@@ -33,9 +31,5 @@ type EndpointDefinition struct {
 
 type TypeDefinition struct {
 	Name     string
-	Structed string
-}
-
-func (t TypeDefinition) toString() string {
-	return fmt.Sprintf("%s    %s", t.Name, t.Structed)
+	TypeName string
 }

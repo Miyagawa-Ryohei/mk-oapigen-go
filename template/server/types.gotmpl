@@ -1,5 +1,8 @@
-package {{ .TypesPackageName }}
+package entity
 
-{{ for .Requests }}
-{{ .RequestProperty }}
+{{ range $key, $element := . }}
+type {{ $key }} struct {
+    {{range .}} {{.Name}} {{.TypeName}}
+    {{ end }}
+}
 {{ end }}
