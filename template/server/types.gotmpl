@@ -1,8 +1,0 @@
-package entity
-
-{{ range $key, $element := . }}
-type {{ $key }} struct {
-    {{range .}} {{.Name}} {{.TypeName}}
-    {{ end }}
-}
-{{ end }}

@@ -1,55 +1,52 @@
 package cmd
 
 import (
-	"fmt"
 	"github.com/spf13/cobra"
-	"mk-oapigen-go/generator"
-	"os"
-	"path"
+	"mk-oapigen-go/usecase"
 )
 
 var serverCmd = &cobra.Command{
 	Use: "server",
 	RunE: func(cmd *cobra.Command, arg []string) error {
-		fmt.Println("generate server code")
 
 		specFile, err := cmd.Flags().GetString("openapi")
 		if err != nil {
 			return err
 		}
 
-		module, err := cmd.Flags().GetString("module")
+		packageName, err := cmd.Flags().GetString("package")
 		if err != nil {
 			return err
 		}
 
-		src, err := cmd.Flags().GetString("src")
+		routerPackage, err := cmd.Flags().GetString("router_package")
 		if err != nil {
 			return err
 		}
 
-		root, err := cmd.Flags().GetString("root")
+		spec, err := usecase.ReadSpec(specFile)
 		if err != nil {
 			return err
 		}
+		serverBuilder := usecase.ServerBuilder{}
+		schemaBuilder := usecase.SchemaBuilder{}
+		routeBuilder := usecase.NewRouteBuilder(spec.Paths, schemaBuilder)
+		server := serverBuilder.BuildServerSchema(spec.Servers[0])
+		routes := routeBuilder.BuildRoutesSchema()
 
-		srcDir := path.Join(root,src)
+		if routerPackage == packageName {
+			routerPackage = ""
+		}
+		gen := usecase.NewServerGenerator(packageName, routerPackage)
+		gen.PrintServer(server, routes)
 
-		if err := os.MkdirAll(path.Join(srcDir),509) ; err != nil {
-			return err
-		}
-		fmt.Println(srcDir)
-		if err = generator.GenerateServerSideCode(specFile,module,srcDir); err != nil {
-			return err
-		}
 		return nil
 	},
 }
 
 func init() {
 	serverCmd.Flags().StringP("openapi", "f", "openapi.yml", "Input OpenAPI Specification file path [ex. docs/openapi.yml] (default openapi.yml")
-	serverCmd.Flags().StringP("module", "m", "", "go mod module name [ex. sample api] (required)")
-	serverCmd.Flags().StringP("src", "s", "./", "source directory [ex. src/] (default src ./)")
-	serverCmd.Flags().StringP("root", "r", "./", "project root directory [ex. ./project] (default src ./)")
+	serverCmd.Flags().StringP("package", "p", "infra", "go mod module name [ex. sample api] (required)")
+	serverCmd.Flags().StringP("router_package", "s", "entity", "schema package")
 	RootCmd.AddCommand(serverCmd)
 }
