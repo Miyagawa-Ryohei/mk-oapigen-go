@@ -1,6 +1,7 @@
 package usecase
 
 import (
+	"encoding/json"
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/iancoleman/strcase"
 	"mk-oapigen-go/entity"
@@ -48,14 +49,36 @@ func (r RouteBuilder) BuildMethods(item *openapi3.PathItem) []entity.Method {
 	return ret
 }
 
+func (r RouteBuilder) GetRouterGroup(item *openapi3.PathItem) string {
+	group, ok := item.Extensions["x-go-gin-group"]
+
+	if !ok {
+		return "/"
+	} else if v, ok := group.(json.RawMessage); !ok {
+		return "/"
+	} else {
+		groupName := ""
+		err := json.Unmarshal(v, &groupName)
+		if err != nil {
+			return "/"
+		}
+		if groupName == "" {
+			return ""
+		} else {
+			return "/" + groupName
+		}
+	}
+}
+
 func (r RouteBuilder) BuildRouteSchema(pathPattern string, item *openapi3.PathItem) entity.Route {
 	name := strcase.ToCamel(strings.Replace(pathPattern, "/", "_", -1))
 	if name == "" {
 		name = "Root"
 	}
 	route := entity.Route{
-		Name: name,
-		Path: pathPattern,
+		Name:  name,
+		Path:  pathPattern,
+		Group: r.GetRouterGroup(item),
 	}
 	methods := r.BuildMethods(item)
 	route.Methods = methods
@@ -64,15 +87,34 @@ func (r RouteBuilder) BuildRouteSchema(pathPattern string, item *openapi3.PathIt
 
 func (r RouteBuilder) BuildRoutesSchema() []entity.Route {
 	routes := []entity.Route{}
+	groups := []string{}
+	routeMap := map[string][]entity.Route{}
 	for p, pi := range r.sp {
 		routes = append(routes, r.BuildRouteSchema(p, pi))
 	}
-	sort.SliceStable(routes, func(i int, j int) bool {
-		if routes[i].Path < routes[j].Path {
-			return true
+
+	for _, r := range routes {
+		if routeMap[r.Group] == nil {
+			groups = append(groups, r.Group)
+			routeMap[r.Group] = []entity.Route{}
 		}
-		return false
-	})
+		routeMap[r.Group] = append(routeMap[r.Group], r)
+	}
+	sort.Strings(groups)
+
+	routes = []entity.Route{}
+	for _, key := range groups {
+		sort.SliceStable(routeMap[key], func(i int, j int) bool {
+			if routeMap[key][i].Path < routeMap[key][j].Path {
+				return true
+			}
+			return false
+		})
+		for _, r := range routeMap[key] {
+			routes = append(routes, r)
+		}
+	}
+
 	return routes
 }
 

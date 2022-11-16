@@ -1,6 +1,7 @@
 package entity
 
 type Server struct {
-	Host string
-	Port string
+	Host       string
+	Port       string
+	Prometheus bool
 }

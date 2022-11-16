@@ -4,6 +4,7 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/iancoleman/strcase"
 	"mk-oapigen-go/entity"
+	"sort"
 	"strings"
 )
 
@@ -49,6 +50,12 @@ func (b SchemaBuilder) BuildObjectSchema(schemaRef *openapi3.SchemaRef) *entity.
 	for name, p := range schemaRef.Value.Properties {
 		properties = append(properties, b.BuildPropertySchema(name, p))
 	}
+	sort.SliceStable(properties, func(i int, j int) bool {
+		if properties[i].Name > properties[j].Name {
+			return true
+		}
+		return false
+	})
 	ret := &entity.StructSchema{
 		Name:         b.convNameFromRef(schemaRef.Ref),
 		Type:         b.detectType(schemaRef),
@@ -86,6 +93,12 @@ func (b SchemaBuilder) BuildObjectSchemaFromParam(name string, parameters *opena
 	for _, p := range *parameters {
 		properties = append(properties, b.BuildPropertySchemaFromParameter(p))
 	}
+	sort.SliceStable(properties, func(i int, j int) bool {
+		if properties[i].Name > properties[j].Name {
+			return true
+		}
+		return false
+	})
 	ret := &entity.StructSchema{
 		Name:         name,
 		Type:         name,

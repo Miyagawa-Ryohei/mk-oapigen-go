@@ -6,6 +6,7 @@ import (
 	"github.com/iancoleman/strcase"
 	"go/format"
 	"mk-oapigen-go/entity"
+	"strings"
 )
 
 type ServerGenerator struct {
@@ -22,8 +23,8 @@ func (g ServerGenerator) CreateGinStruct() (str string) {
 		"import ( \n"+
 		"\"github.com/gin-gonic/gin\"\n"+
 		")\n"+
-		"\n type Server struct {"+
-		"engine *gin.Engine"+
+		"\n type Server struct {\n"+
+		"engine *gin.Engine\n"+
 		"}\n",
 		g.Package,
 		g.Package,
@@ -34,23 +35,41 @@ func (g ServerGenerator) CreateGinStruct() (str string) {
 func (g ServerGenerator) CreateRouterRegister(routes []entity.Route) (str string) {
 	args := ""
 	funcConts := ""
+	groupMap := map[string][]entity.Route{}
 	for _, r := range routes {
-		argName := strcase.ToLowerCamel(r.Name)
-		args = args + fmt.Sprintf(
-			"%s %s%sServiceRouter,\n",
-			argName,
-			g.RouterPackage,
-			r.Name,
-		)
-		for _, m := range r.Methods {
-			method := strcase.ToCamel(m.Type)
-			funcConts = funcConts + fmt.Sprintf(
-				"s.engine.%s(\"%s\",%s.Get%sHandler())\n",
-				method,
-				r.Path,
+		if _, ok := groupMap[r.Group]; !ok {
+			groupMap[r.Group] = []entity.Route{}
+		}
+		groupMap[r.Group] = append(groupMap[r.Group], r)
+	}
+
+	for group, routes := range groupMap {
+		instanceStr := "s.engine."
+		funcConts = funcConts + "\n"
+		if group != "/" {
+			g := strings.Replace(group, "/", "", -1)
+			funcConts = funcConts + fmt.Sprintf("%s := s.engine.Group(\"%s\")\n", g, group)
+			instanceStr = g + "."
+		}
+		for _, r := range routes {
+			argName := strcase.ToLowerCamel(r.Name)
+			args = args + fmt.Sprintf(
+				"%s %s%sServiceRouter,\n",
 				argName,
-				m.Type,
+				g.RouterPackage,
+				r.Name,
 			)
+			for _, m := range r.Methods {
+				method := strcase.ToCamel(m.Type)
+				funcConts = funcConts + fmt.Sprintf(
+					"%s%s(\"%s\",%s.Get%sHandler())\n",
+					instanceStr,
+					method,
+					r.Path,
+					argName,
+					m.Type,
+				)
+			}
 		}
 	}
 	str = fmt.Sprintf(""+
@@ -58,11 +77,10 @@ func (g ServerGenerator) CreateRouterRegister(routes []entity.Route) (str string
 		" %s "+
 		"middleWares... gin.HandlerFunc,\n"+
 		") { \n"+
-		""+
 		"if len(middleWares) > 0 {\n"+
 		"    s.engine.Use(middleWares...)\n"+
 		"}\n"+
-		" %s}\n ",
+		" %s}\n\n",
 		args,
 		funcConts,
 	)
@@ -78,13 +96,25 @@ func (g ServerGenerator) CreateListen(server entity.Server) (str string) {
 			"    p = *port\n"+
 			"}\n"+
 			"return s.engine.Run(\":\" + p)\n"+
-			"}\n",
+			"}\n\n",
 		server.Port)
 	return
 }
 
+func (g ServerGenerator) CreateExporterRouteRegister(server entity.Server) string {
+	if !server.Prometheus {
+		return ""
+	}
+	return "" +
+		"func (s *Server) RegistExporter(exporter gin.HandlerFunc) { \n" +
+		"    s.engine.GET(\"/metrics\", exporter)\n" +
+		"}\n\n"
+
+}
+
 func (g ServerGenerator) CreateServer(server entity.Server, routes []entity.Route) (str string) {
 	str = str + g.CreateGinStruct()
+	str = str + g.CreateExporterRouteRegister(server)
 	str = str + g.CreateRouterRegister(routes)
 	str = str + g.CreateListen(server)
 	str = str + g.CreateConstructor()
@@ -95,7 +125,7 @@ func (g ServerGenerator) CreateConstructor() (str string) {
 	return fmt.Sprintf("" +
 		"func NewServer() *Server {\n" +
 		"    return &Server{\n" +
-		"        engine : gin.Default(),\n" +
+		"        engine : gin.New(),\n" +
 		"    }\n" +
 		"}\n")
 }

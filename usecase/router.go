@@ -40,6 +40,7 @@ func (g RouterGenerator) CreateHeader() (str string) {
 		"\"encoding/json\"\n"+
 		"\n"+
 		"\"github.com/gin-gonic/gin\"\n"+
+		"\"github.com/pkg/errors\"\n"+
 		")\n",
 		g.Package,
 		g.Package,
@@ -60,9 +61,9 @@ func (g RouterGenerator) CreateStruct(route entity.Route) (str string) {
 func (g RouterGenerator) CreateHandleFunc(method entity.Method) (str string) {
 	respSet := ""
 	if method.Response.StructRef != nil || method.Response.ArrayRef != nil {
-		respSet = "ctx.JSON(200,*resp)"
+		respSet = "ctx.JSON(200,*resp)\n"
 	} else {
-		respSet = "ctx.String(200,string(*resp))"
+		respSet = "ctx.String(200,string(*resp))\n"
 	}
 	req := ""
 	if method.Type == http.MethodGet {
@@ -178,6 +179,23 @@ func (g RouterGenerator) CreateHandleFunc(method entity.Method) (str string) {
 							name,
 						)
 						break
+					case "*time.Time":
+						req = req + fmt.Sprintf(
+							"var %s *time.Time\n"+
+								"%sBuf := ctx.%s(\"%s\")\n"+
+								"if %sRaw,err := time.Parse(time.RFC3339, %sBuf); err == nil {\n"+
+								"    %s = &%sRaw\n"+
+								"}\n",
+							name,
+							name,
+							getMethod,
+							p.Tag.Name,
+							name,
+							name,
+							name,
+							name,
+						)
+						break
 					case "string":
 						req = req + fmt.Sprintf(
 							"%s := ctx.%s(\"%s\")\n",
@@ -204,6 +222,7 @@ func (g RouterGenerator) CreateHandleFunc(method entity.Method) (str string) {
 					req = req + fmt.Sprintf(""+
 						"if err != nil {\n"+
 						"    ctx.Error(err)\n"+
+						"    ctx.String(400,err.Error())\n"+
 						"    return \n"+
 						"}\n",
 					)
@@ -228,7 +247,8 @@ func (g RouterGenerator) CreateHandleFunc(method entity.Method) (str string) {
 			req = fmt.Sprintf(""+
 				"req := new(%s%s) \n"+
 				"if err := ctx.BindJSON(req); err != nil {\n"+
-				"ctx.Error(err)\n"+
+				"err := ctx.Error(err)\n"+
+				"ctx.String(400,err.Error())\n"+
 				"return \n"+
 				"}\n",
 				g.SchemaPackage,
@@ -240,19 +260,45 @@ func (g RouterGenerator) CreateHandleFunc(method entity.Method) (str string) {
 	if req == "" {
 		request = ""
 	}
+
+	errHandling := fmt.Sprintf(""+
+		"    if errors.Is(err,%sBadRequest){\n"+
+		"		ctx.String(400,err.Error()) \n"+
+		"    } else if errors.Is(%sUnauthorized, err){\n"+
+		"		ctx.String(401,err.Error()) \n"+
+		"    } else if errors.Is(%sNotFound, err){\n"+
+		"		ctx.String(404,err.Error()) \n"+
+		"    } else if errors.Is(%sNotImplemented, err){\n"+
+		"		ctx.String(501,err.Error()) \n"+
+		"    } else if errors.Is(%sBadGateway, err){\n"+
+		"		ctx.String(502,err.Error()) \n"+
+		"    } else if errors.Is(%sInternalServerError, err){\n"+
+		"		ctx.String(500,err.Error()) \n"+
+		"    } else { \n"+
+		"		ctx.String(500,err.Error()) \n"+
+		"    }\n",
+		g.SchemaPackage,
+		g.SchemaPackage,
+		g.SchemaPackage,
+		g.SchemaPackage,
+		g.SchemaPackage,
+		g.SchemaPackage,
+	)
+
 	str = fmt.Sprintf(""+
 		"func(ctx *gin.Context) { \n"+
-		"%s\n"+
-		"resp, err := r.service.%s(%s)\n"+
-		"if err != nil {\n"+
-		"ctx.Error(err)\n"+
-		"return \n"+
-		"}\n"+
-		"%s\n"+
+		"    %s\n"+
+		"    resp, err := r.service.%s(%s)\n"+
+		"    if err != nil {\n"+
+		"        %s\n"+
+		"        return \n"+
+		"    }\n"+
+		"    %s\n"+
 		"} \n",
 		req,
 		method.Name,
 		request,
+		errHandling,
 		respSet,
 	)
 	return
